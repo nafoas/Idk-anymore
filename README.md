@@ -13,8 +13,8 @@ A Discord bot that generates full songs from slash commands using the
 - `genre` (optional): any genre. Suggestions appear as you type, but you can enter anything.
 
 Discord shows *"Bot is thinking…"* while the song generates, which usually
-takes a minute or two. Then the bot posts the finished audio (Treblo
-usually returns more than one version) and the lyrics. A file too big for
+takes about two minutes. Then the bot posts the finished MP3 (around 2.5 MB)
+and the lyrics. A file too big for
 the server's upload limit is posted as a download link instead.
 
 Built-in limits: each user can have one song generating at a time, with a
@@ -62,4 +62,4 @@ musicbot/
 tests/        # client tests against a local fake API server
 ```
 
-Run the tests with `pip install -r requirements-dev.txt && pytest`.
+Each song costs 100 Treblo credits. Run the tests with `pip install -r requirements-dev.txt && pytest`.
