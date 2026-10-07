@@ -91,7 +91,7 @@ async def test_generate_posts_song_and_lyrics(make_bot):
     bot = make_bot(treblo)
     inter = FakeInteraction()
 
-    await bot.generate(inter, "My WiFi going out mid-meeting", "Country")
+    await bot.generate(inter, "My WiFi going out mid-meeting", "Country", show_lyrics=True)
 
     assert inter.response.deferred
     assert treblo.prompts == ["My WiFi going out mid-meeting\nGenre: Country"]
@@ -128,3 +128,11 @@ async def test_cooldown_blocks_second_request(make_bot):
     content, ephemeral = second.response.messages[0]
     assert "Slow down" in content and ephemeral
     assert second.followup.sent == []
+
+
+async def test_lyrics_off_by_default(make_bot):
+    bot = make_bot(FakeTreblo())
+    inter = FakeInteraction()
+    await bot.generate(inter, "lofi beat", None)
+    assert len(inter.followup.sent) == 1
+    assert "Lyrics" not in inter.followup.sent[0]["content"]

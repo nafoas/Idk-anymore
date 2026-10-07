@@ -11,10 +11,11 @@ A Discord bot that generates full songs from slash commands using the
 
 - `prompt` (required): what the song should be about
 - `genre` (optional): any genre. Suggestions appear as you type, but you can enter anything.
+- `lyrics` (optional, true/false): also post the song's lyrics. Off by default.
 
 Discord shows *"Bot is thinking…"* while the song generates, which usually
-takes about two minutes. Then the bot posts the finished MP3 (around 2.5 MB)
-and the lyrics. A file too big for
+takes about two minutes. Then the bot posts the finished MP3 (around 2.5 MB),
+plus the lyrics if you set `lyrics: True`. A file too big for
 the server's upload limit is posted as a download link instead.
 
 Built-in limits: each user can have one song generating at a time, with a

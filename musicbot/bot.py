@@ -80,7 +80,11 @@ class MusicBot(discord.Client):
         return None
 
     async def generate(
-        self, interaction: discord.Interaction, prompt: str, genre: str | None
+        self,
+        interaction: discord.Interaction,
+        prompt: str,
+        genre: str | None,
+        show_lyrics: bool = False,
     ) -> None:
         user = interaction.user
         log.info("/generate from %s in %s: %r (genre %r)", user, interaction.guild, prompt, genre)
@@ -96,7 +100,7 @@ class MusicBot(discord.Client):
             async with self.jobs:
                 request = GenerationRequest(prompt=build_prompt(prompt, genre))
                 result = await self.treblo.generate(request, timeout=self.timeout)
-                await self.deliver(interaction, result, prompt, genre)
+                await self.deliver(interaction, result, prompt, genre, show_lyrics)
                 log.info("Delivered song %s to %s", result.task_id, user)
         except TrebloError as exc:
             log.warning("Generation for %s failed: %s", user.id, exc)
@@ -113,6 +117,7 @@ class MusicBot(discord.Client):
         result: GenerationResult,
         prompt: str,
         genre: str | None,
+        show_lyrics: bool = False,
     ) -> None:
         limit = interaction.guild.filesize_limit if interaction.guild else 10 * 1024**2
         files: list[discord.File] = []
@@ -136,7 +141,7 @@ class MusicBot(discord.Client):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-        if result.lyrics and result.lyrics.strip():
+        if show_lyrics and result.lyrics and result.lyrics.strip():
             lyrics = result.lyrics.strip()
             if len(lyrics) > 1900:
                 await interaction.followup.send(
@@ -152,13 +157,15 @@ def register_commands(bot: MusicBot) -> None:
     @app_commands.describe(
         prompt="What the song is about, e.g. 'my WiFi going out mid-meeting'",
         genre="Optional genre, e.g. country, lo-fi, metal",
+        lyrics="Also post the song's lyrics (off by default)",
     )
     async def generate(
         interaction: discord.Interaction,
         prompt: app_commands.Range[str, 3, 1500],
         genre: app_commands.Range[str, 1, 100] | None = None,
+        lyrics: bool = False,
     ) -> None:
-        await bot.generate(interaction, prompt, genre)
+        await bot.generate(interaction, prompt, genre, lyrics)
 
     @generate.autocomplete("genre")
     async def genre_autocomplete(
