@@ -83,6 +83,7 @@ class MusicBot(discord.Client):
         self, interaction: discord.Interaction, prompt: str, genre: str | None
     ) -> None:
         user = interaction.user
+        log.info("/generate from %s in %s: %r (genre %r)", user, interaction.guild, prompt, genre)
         if error := self.check_rate_limit(user.id):
             await interaction.response.send_message(error, ephemeral=True)
             return
@@ -96,6 +97,7 @@ class MusicBot(discord.Client):
                 request = GenerationRequest(prompt=build_prompt(prompt, genre))
                 result = await self.treblo.generate(request, timeout=self.timeout)
                 await self.deliver(interaction, result, prompt, genre)
+                log.info("Delivered song %s to %s", result.task_id, user)
         except TrebloError as exc:
             log.warning("Generation for %s failed: %s", user.id, exc)
             await interaction.followup.send(f"❌ Couldn't make that song: {exc}")
