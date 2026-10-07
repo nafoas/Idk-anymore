@@ -3,19 +3,19 @@
 A Discord bot that generates full songs from slash commands using the
 [Treblo](https://treblo.com/developers) **Melodia v3** API.
 
-## Commands
+## Usage
 
-| Command | What it does |
-| --- | --- |
-| `/song prompt:<text> [instrumental] [length] [format]` | Generates a song from a description, e.g. `/song prompt: Country song about my WiFi going out mid-meeting` |
-| `/compose [format]` | Opens a form where you enter style tags plus your own lyrics (leave the lyrics empty for an instrumental) |
-| `/credits` | Shows the remaining Treblo credit balance. Only visible to members with *Manage Server*. |
-| `/help` | Lists the commands |
+```
+/generate prompt: Song about my WiFi going out mid-meeting  genre: Country
+```
 
-While a song generates, the bot keeps updating its message with the current
-status. When the song is done, the bot uploads the audio files (Treblo
-usually returns more than one version) and posts the lyrics. A file too big
-for the server's upload limit is posted as a download link instead.
+- `prompt` (required): what the song should be about
+- `genre` (optional): any genre. Suggestions appear as you type, but you can enter anything.
+
+Discord shows *"Bot is thinking…"* while the song generates, which usually
+takes a minute or two. Then the bot posts the finished audio (Treblo
+usually returns more than one version) and the lyrics. A file too big for
+the server's upload limit is posted as a download link instead.
 
 Built-in limits: each user can have one song generating at a time, with a
 cooldown between requests, and only a few songs generate at once across the

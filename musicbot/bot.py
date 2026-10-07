@@ -7,7 +7,6 @@ import io
 import logging
 import os
 import time
-from typing import Literal
 
 import discord
 from discord import app_commands
@@ -17,30 +16,25 @@ from .treblo import GenerationRequest, GenerationResult, TrebloClient, TrebloErr
 
 log = logging.getLogger("musicbot")
 
-STATUS_TEXT = {
-    "RECEIVED": "Request received",
-    "PENDING": "Queued",
-    "QUEUED": "Queued",
-    "GENERATING": "Generating music",
-    "GENERATING_LYRICS": "Writing lyrics",
-    "PROMPT": "Reading your prompt",
-    "TAGS": "Picking a style",
-    "DECOMPRESSING": "Mixing",
-    "SAVING": "Saving audio",
-    "SUCCESS": "Done",
-}
-
-LengthChoice = Literal["short (~1 min)", "medium (~2 min)", "long (~3+ min)"]
-LENGTHS: dict[str, tuple[int, int]] = {
-    "short (~1 min)": (30, 90),
-    "medium (~2 min)": (90, 150),
-    "long (~3+ min)": (150, 240),
-}
+# Suggestions shown while typing the genre; any other text is accepted too.
+GENRES = [
+    "Pop", "Rock", "Hip-Hop", "Rap", "R&B", "Country", "Jazz", "Blues",
+    "Electronic", "EDM", "House", "Techno", "Lo-fi", "Synthwave", "Metal",
+    "Punk", "Indie", "Folk", "Classical", "Reggae", "K-pop", "Latin",
+    "Funk", "Disco", "Soul", "Gospel", "Ambient", "Trap", "Drill", "Musical",
+]
 
 
 def _env_int(name: str, default: int) -> int:
     value = os.getenv(name)
     return int(value) if value else default
+
+
+def build_prompt(prompt: str, genre: str | None) -> str:
+    prompt = prompt.strip()
+    if genre and genre.strip():
+        return f"{prompt}\nGenre: {genre.strip()}"
+    return prompt
 
 
 class MusicBot(discord.Client):
@@ -79,11 +73,8 @@ class MusicBot(discord.Client):
             return f"Slow down! You can make another song in {int(wait) + 1}s."
         return None
 
-    async def run_generation(
-        self,
-        interaction: discord.Interaction,
-        request: GenerationRequest,
-        title: str,
+    async def generate(
+        self, interaction: discord.Interaction, prompt: str, genre: str | None
     ) -> None:
         user = interaction.user
         if error := self.check_rate_limit(user.id):
@@ -92,30 +83,19 @@ class MusicBot(discord.Client):
 
         self.active_users.add(user.id)
         self.last_request[user.id] = time.monotonic()
-        await interaction.response.send_message(f"🎼 **{title}**\n⏳ Waiting for a free slot…")
+        # Shows "<bot> is thinking..." until the song is posted.
+        await interaction.response.defer(thinking=True)
         try:
             async with self.jobs:
-                task_id = await self.treblo.create_generation(request)
-                log.info("User %s started task %s", user.id, task_id)
-
-                async def on_status(status: str) -> None:
-                    text = STATUS_TEXT.get(status, status.replace("_", " ").title())
-                    await interaction.edit_original_response(
-                        content=f"🎼 **{title}**\n⏳ {text}…"
-                    )
-
-                result = await self.treblo.wait_for_result(
-                    task_id, timeout=self.timeout, on_status=on_status
-                )
-                await self.deliver(interaction, result, title, request.output_format)
+                request = GenerationRequest(prompt=build_prompt(prompt, genre))
+                result = await self.treblo.generate(request, timeout=self.timeout)
+                await self.deliver(interaction, result, prompt, genre)
         except TrebloError as exc:
             log.warning("Generation for %s failed: %s", user.id, exc)
-            await interaction.edit_original_response(content=f"🎼 **{title}**\n❌ {exc}")
+            await interaction.followup.send(f"❌ Couldn't make that song: {exc}")
         except Exception:
             log.exception("Unexpected error generating for %s", user.id)
-            await interaction.edit_original_response(
-                content=f"🎼 **{title}**\n❌ Something went wrong. Please try again."
-            )
+            await interaction.followup.send("❌ Something went wrong. Please try again.")
         finally:
             self.active_users.discard(user.id)
 
@@ -123,8 +103,8 @@ class MusicBot(discord.Client):
         self,
         interaction: discord.Interaction,
         result: GenerationResult,
-        title: str,
-        fmt: str,
+        prompt: str,
+        genre: str | None,
     ) -> None:
         limit = interaction.guild.filesize_limit if interaction.guild else 10 * 1024**2
         files: list[discord.File] = []
@@ -134,16 +114,17 @@ class MusicBot(discord.Client):
             if data is None:
                 links.append(f"[Version {i}]({url})")
             else:
-                files.append(discord.File(io.BytesIO(data), filename=f"song_{i}.{fmt}"))
+                files.append(discord.File(io.BytesIO(data), filename=f"song_{i}.mp3"))
 
-        lines = [f"🎶 **{title}** by {interaction.user.mention}"]
-        if result.tags:
-            lines.append(f"Style: {', '.join(result.tags[:10])}")
+        title = prompt if len(prompt) <= 200 else prompt[:197] + "…"
+        lines = [f"🎶 **{title}**"]
+        if genre:
+            lines.append(f"Genre: {genre}")
         if links:
             lines.append("Too big to upload here, download: " + " · ".join(links))
-        await interaction.edit_original_response(
-            content="\n".join(lines),
-            attachments=files,
+        await interaction.followup.send(
+            "\n".join(lines),
+            files=files,
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
@@ -158,99 +139,25 @@ class MusicBot(discord.Client):
                 await interaction.followup.send(f"📝 **Lyrics**\n```\n{lyrics}\n```")
 
 
-class ComposeModal(discord.ui.Modal, title="Compose a song"):
-    style = discord.ui.TextInput(
-        label="Style tags (comma separated)",
-        placeholder="e.g. synthwave, female vocals, upbeat, 80s",
-        max_length=500,
-    )
-    lyrics = discord.ui.TextInput(
-        label="Lyrics (leave empty for instrumental)",
-        style=discord.TextStyle.paragraph,
-        placeholder="[Verse]\nWrite your lyrics here...\n\n[Chorus]\n...",
-        required=False,
-        max_length=4000,
-    )
-
-    def __init__(self, bot: MusicBot, fmt: str) -> None:
-        super().__init__()
-        self.bot = bot
-        self.fmt = fmt
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        tags = [t.strip() for t in self.style.value.split(",") if t.strip()]
-        lyrics = self.lyrics.value.strip()
-        request = GenerationRequest(
-            tags=tags,
-            lyrics=lyrics or None,
-            instrumental=not lyrics,
-            output_format=self.fmt,
-        )
-        await self.bot.run_generation(interaction, request, title=", ".join(tags[:5]))
-
-
 def register_commands(bot: MusicBot) -> None:
-    tree = bot.tree
-
-    @tree.command(name="song", description="Generate a song from a text prompt")
+    @bot.tree.command(name="generate", description="Generate a song from a text prompt")
     @app_commands.describe(
-        prompt="Describe the song, e.g. 'Country song about my WiFi going out mid-meeting'",
-        instrumental="No vocals",
-        length="Roughly how long the song should be",
-        format="Audio file format (mp3 plays inline in Discord)",
+        prompt="What the song is about, e.g. 'my WiFi going out mid-meeting'",
+        genre="Optional genre, e.g. country, lo-fi, metal",
     )
-    async def song(
+    async def generate(
         interaction: discord.Interaction,
         prompt: app_commands.Range[str, 3, 1500],
-        instrumental: bool = False,
-        length: LengthChoice | None = None,
-        format: Literal["mp3", "ogg", "wav", "flac", "m4a"] = "mp3",
+        genre: app_commands.Range[str, 1, 100] | None = None,
     ) -> None:
-        request = GenerationRequest(
-            prompt=prompt,
-            instrumental=instrumental,
-            output_format=format,
-            length_range=LENGTHS[length] if length else None,
-        )
-        title = prompt if len(prompt) <= 200 else prompt[:197] + "…"
-        await bot.run_generation(interaction, request, title=title)
+        await bot.generate(interaction, prompt, genre)
 
-    @tree.command(name="compose", description="Write your own lyrics and pick the style")
-    @app_commands.describe(format="Audio file format (mp3 plays inline in Discord)")
-    async def compose(
-        interaction: discord.Interaction,
-        format: Literal["mp3", "ogg", "wav", "flac", "m4a"] = "mp3",
-    ) -> None:
-        if error := bot.check_rate_limit(interaction.user.id):
-            await interaction.response.send_message(error, ephemeral=True)
-            return
-        await interaction.response.send_modal(ComposeModal(bot, format))
-
-    @tree.command(name="credits", description="Show the bot's remaining Treblo credits")
-    @app_commands.default_permissions(manage_guild=True)
-    async def credits(interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
-        try:
-            balance = await bot.treblo.get_balance()
-        except TrebloError as exc:
-            await interaction.followup.send(f"❌ {exc}", ephemeral=True)
-            return
-        if isinstance(balance, dict):
-            text = "\n".join(f"**{k.replace('_', ' ')}**: {v}" for k, v in balance.items())
-        else:
-            text = str(balance)
-        await interaction.followup.send(f"💳 Treblo balance\n{text}", ephemeral=True)
-
-    @tree.command(name="help", description="How to use the music bot")
-    async def help_(interaction: discord.Interaction) -> None:
-        await interaction.response.send_message(
-            "**🎵 Music bot commands**\n"
-            "`/song prompt:` describe a song and get it back as audio\n"
-            "`/compose` write your own lyrics and choose the style\n"
-            "`/credits` check remaining API credits (server managers)\n"
-            f"One song at a time per person, {bot.cooldown}s cooldown between requests.",
-            ephemeral=True,
-        )
+    @generate.autocomplete("genre")
+    async def genre_autocomplete(
+        interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        matches = [g for g in GENRES if current.lower() in g.lower()]
+        return [app_commands.Choice(name=g, value=g) for g in matches[:25]]
 
 
 def main() -> None:
