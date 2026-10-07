@@ -6,6 +6,7 @@ import asyncio
 import io
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -167,6 +168,10 @@ def register_commands(bot: MusicBot) -> None:
 
 def ask_for_discord_token() -> str:
     """Ask for the bot token on first run and save it to .env for next time."""
+    if not sys.stdin.isatty():
+        raise SystemExit(
+            "DISCORD_TOKEN is not set. On Railway, add it under your service's Variables tab."
+        )
     print("No Discord bot token found.")
     print("Get one at https://discord.com/developers/applications -> your app -> Bot -> Reset Token")
     token = input("Paste your Discord bot token: ").strip()

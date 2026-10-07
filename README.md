@@ -39,6 +39,20 @@ The Treblo API key is already built in, so you only need a Discord bot.
 New slash commands can take a while to show up everywhere. To make `/generate` appear instantly in your
 server, add `DEV_GUILD_ID=<your server ID>` to `.env`.
 
+## Run it 24/7 on Railway
+
+`railway.json` is already set up, so Railway knows how to start the bot.
+
+1. Sign in at <https://railway.com> with GitHub.
+2. Click *New Project* → *Deploy from GitHub repo* → `nafoas/Idk-anymore`.
+3. Open the service → *Variables* → add `DISCORD_TOKEN` with your bot token.
+
+The token goes in Railway, not in the code: Discord automatically resets bot tokens it finds in public
+GitHub repos.
+
+**Invite link for the bot:**
+<https://discord.com/oauth2/authorize?client_id=1557418640091910207&scope=bot+applications.commands&permissions=35840>
+
 ## Configuration (`.env`)
 
 | Variable | Default | Meaning |
