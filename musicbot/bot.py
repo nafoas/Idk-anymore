@@ -7,6 +7,7 @@ import io
 import logging
 import os
 import time
+from pathlib import Path
 
 import discord
 from discord import app_commands
@@ -15,6 +16,10 @@ from dotenv import load_dotenv
 from .treblo import GenerationRequest, GenerationResult, TrebloClient, TrebloError
 
 log = logging.getLogger("musicbot")
+
+# Built-in Treblo key so the bot works out of the box; TREBLO_API_KEY overrides it.
+DEFAULT_TREBLO_API_KEY = "sksonauto_Ni1eX0sJ5MBNX_cVSqDmdEdoSA7FR12kwoTzjWRw3VjrlZGH"
+ENV_FILE = Path(".env")
 
 # Suggestions shown while typing the genre; any other text is accepted too.
 GENRES = [
@@ -160,16 +165,27 @@ def register_commands(bot: MusicBot) -> None:
         return [app_commands.Choice(name=g, value=g) for g in matches[:25]]
 
 
+def ask_for_discord_token() -> str:
+    """Ask for the bot token on first run and save it to .env for next time."""
+    print("No Discord bot token found.")
+    print("Get one at https://discord.com/developers/applications -> your app -> Bot -> Reset Token")
+    token = input("Paste your Discord bot token: ").strip()
+    if not token:
+        raise SystemExit("A Discord bot token is required to start the bot.")
+    with ENV_FILE.open("a") as f:
+        f.write(f"\nDISCORD_TOKEN={token}\n")
+    print(f"Saved to {ENV_FILE.resolve()}, you won't be asked again.")
+    return token
+
+
 def main() -> None:
     load_dotenv()
     logging.basicConfig(
         level=os.getenv("LOG_LEVEL", "INFO"),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    token = os.getenv("DISCORD_TOKEN")
-    api_key = os.getenv("TREBLO_API_KEY")
-    if not token or not api_key:
-        raise SystemExit("Set DISCORD_TOKEN and TREBLO_API_KEY (see .env.example)")
+    token = os.getenv("DISCORD_TOKEN") or ask_for_discord_token()
+    api_key = os.getenv("TREBLO_API_KEY") or DEFAULT_TREBLO_API_KEY
 
     treblo = TrebloClient(api_key, base_url=os.getenv("TREBLO_BASE_URL", "https://api.treblo.com"))
     guild_id = os.getenv("DEV_GUILD_ID")
